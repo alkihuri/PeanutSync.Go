@@ -13,11 +13,13 @@ public class SceneSyncController : ControllerBase
 
     [HttpGet] 
     [Route("GetCurrentSceneStructure")]
-    public IActionResult Get()
+    public async Task<IActionResult> Get()
     {
+
+        var file = JsonSerializer.Deserialize<SceneData>(System.IO.File.ReadAllText("data_client.json"));
         if (_sceneData != null)
         {
-            return Ok(_sceneData);
+            return Ok(file);
         }
         else
         {
@@ -25,14 +27,7 @@ public class SceneSyncController : ControllerBase
         }
     }
 
-
-    [HttpGet] 
-    [Route("GetPositionByName")]
-    public string GetPositionByName(string name)
-    {
-        return _sceneData?.GameObjectsUnity.Where(o=>o.Name == name).First().Positions.Last().x.ToString();
-    }
-
+  
     
     [HttpPost]
     [Route("SetCurrentSceneStructure")]
@@ -45,8 +40,7 @@ public class SceneSyncController : ControllerBase
             try
             {
                 sceneStructure = JsonSerializer.Deserialize<SceneData>(jsonData); 
-               // System.IO.File.WriteAllText("data_client.json",JsonSerializer.Serialize(sceneStructure));
-                //System.IO.File.WriteAllText("data_client2.json",jsonData);
+                System.IO.File.WriteAllText("data_client2.json",jsonData);
                 // ... ваш код обработки данных ...
             }
             catch (JsonException ex)
@@ -69,6 +63,7 @@ public class SceneSyncController : ControllerBase
                 obj.PredictedPosition  =  IsZero ? lastPoint : nextPoint; 
             } 
 
+            System.IO.File.WriteAllText("data_client.json",JsonSerializer.Serialize(_sceneData));
             return Ok(_sceneData);
         }
     }

@@ -6,11 +6,12 @@ using System.Collections;
 using UnityEditor;
 using UnityEngine.Events;
 using Unity.VisualScripting;
+using System;
 
 public class SyncSceneViewManager : MonoBehaviour
 {
     private int frameCount = 0;
-    private const int framesPerRequest = 200; // Отправлять запрос каждый 200-й кадр
+    private const int framesPerRequest = 6; // Отправлять запрос каждый 200-й кадр
     private const int port = 5267;
     private string setStructureURL = $"http://localhost:{port}/SetCurrentSceneStructure";
     private string getCurrentStructureURL = $"http://localhost:{port}/GetCurrentSceneStructure";
@@ -36,7 +37,7 @@ public class SyncSceneViewManager : MonoBehaviour
 
         if (frameCount % framesPerRequest == 0)
         {
-            // StartCoroutine(GetSceneStructure());
+            StartCoroutine(GetSceneStructure());
         }
     }
 
@@ -72,30 +73,34 @@ public class SyncSceneViewManager : MonoBehaviour
             Debug.Log("Server Response: " + responseText);
 
             // Дополнительная обработка ответа, например, десериализация JSON
-            _sceneDataFromServer = JsonUtility.FromJson<SceneData>(responseText);
-            UpdatePistions(_sceneDataFromServer);
+
         }
     }
 
 
     private IEnumerator GetSceneStructure()
-    {
-        UnityWebRequest www = new UnityWebRequest(getCurrentStructureURL, "GET");
+    { 
+        UnityWebRequest www = UnityWebRequest.Get(getCurrentStructureURL);
+
         yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
+
+        if (www.result == UnityWebRequest.Result.Success)
         {
-            Debug.Log(www.error);
+            // Получение текстового ответа от сервера
+            string responseText = www.downloadHandler.text;
+            Debug.Log("Server Response (GET): " + responseText);
+
+            _sceneDataFromServer = JsonUtility.FromJson<SceneData>(responseText);
+
+            UpdatePistions(_sceneDataFromServer);
+            // Здесь вы можете обработать ответ, например, десериализовать JSON
         }
         else
         {
-            string responseText = www?.downloadHandler?.text; // Получение текстового ответа от сервера
-
-
-            // Дополнительная обработка ответа, например, десериализация JSON
-            _sceneDataFromServer = JsonUtility.FromJson<SceneData>(responseText);
-            if (_sceneDataFromServer?.GameObjectsUnity?.Count > 0)
-                UpdatePistions(_sceneDataFromServer);
+            Debug.LogError("GET Request Error: " + www.error);
         }
+
+
 
     }
 
@@ -146,7 +151,7 @@ public class SyncSceneViewManager : MonoBehaviour
 
             //  print(objectToSync.name + "<color=green> synced </color>");
 
-            objectToSync.transform.localPosition = gameObject.PredictedPosition.UnityVector3;
+            objectToSync.transform.localPosition = gameObject.Positions.LastOrDefault().UnityVector3;
         }
 
     }
