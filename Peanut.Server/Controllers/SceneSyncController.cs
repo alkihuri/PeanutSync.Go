@@ -15,9 +15,25 @@ public class SceneSyncController : ControllerBase
     [Route("GetCurrentSceneStructure")]
     public IActionResult Get()
     {
-        return Ok(JsonSerializer.Serialize(_sceneData));
+        if (_sceneData != null)
+        {
+            return Ok(_sceneData);
+        }
+        else
+        {
+            return NotFound(); // Или другой код состояния в зависимости от вашего требования
+        }
     }
 
+
+    [HttpGet] 
+    [Route("GetPositionByName")]
+    public string GetPositionByName(string name)
+    {
+        return _sceneData?.GameObjectsUnity.Where(o=>o.Name == name).First().Positions.Last().x.ToString();
+    }
+
+    
     [HttpPost]
     [Route("SetCurrentSceneStructure")]
     public async Task<IActionResult> Post()
@@ -29,8 +45,8 @@ public class SceneSyncController : ControllerBase
             try
             {
                 sceneStructure = JsonSerializer.Deserialize<SceneData>(jsonData); 
-                System.IO.File.WriteAllText("data_client.json",JsonSerializer.Serialize(sceneStructure));
-                System.IO.File.WriteAllText("data_client2.json",jsonData);
+               // System.IO.File.WriteAllText("data_client.json",JsonSerializer.Serialize(sceneStructure));
+                //System.IO.File.WriteAllText("data_client2.json",jsonData);
                 // ... ваш код обработки данных ...
             }
             catch (JsonException ex)
@@ -40,6 +56,19 @@ public class SceneSyncController : ControllerBase
 
             
             _sceneData = sceneStructure;   
+
+            foreach(var obj in _sceneData.GameObjectsUnity)
+            {
+
+                var nextPoint = PredictionUtility.PredictNextPoint(obj.Positions.ToArray());
+                var lastPoint = obj.Positions.Last();
+
+                bool IsZero = nextPoint.x==0 && nextPoint.y ==0; 
+
+
+                obj.PredictedPosition  =  IsZero ? lastPoint : nextPoint; 
+            } 
+
             return Ok(_sceneData);
         }
     }

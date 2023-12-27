@@ -4,6 +4,8 @@ using System.Linq;
 using UnityEngine.Networking;
 using System.Collections;
 using UnityEditor;
+using UnityEngine.Events;
+using Unity.VisualScripting;
 
 public class SyncSceneViewManager : MonoBehaviour
 {
@@ -13,8 +15,20 @@ public class SyncSceneViewManager : MonoBehaviour
     private string setStructureURL = $"http://localhost:{port}/SetCurrentSceneStructure";
     private string getCurrentStructureURL = $"http://localhost:{port}/GetCurrentSceneStructure";
 
-    [SerializeField] private SceneData _currentSceneStructure = new SceneData(new List<GameObjectUnity>());
-    [SerializeField] private SceneData _sceneDataFromServer = new SceneData(new List<GameObjectUnity>());
+    [SerializeField] private SceneData _currentSceneStructure = new SceneData();
+    [SerializeField] private SceneData _sceneDataFromServer = new SceneData();
+    private List<Transform> _listOfNativeTransforms = new List<Transform>();
+
+    public UnityEvent OnAnyObjectChanged = new UnityEvent();
+
+    private void Awake()
+    {
+        OnAnyObjectChanged.AddListener(SendSceneSctructureInvoke);
+
+
+        SendSceneSctructureInvoke();
+    }
+
 
     private async void Update()
     {
@@ -22,7 +36,7 @@ public class SyncSceneViewManager : MonoBehaviour
 
         if (frameCount % framesPerRequest == 0)
         {
-            SendSceneSctructureInvoke();
+            // StartCoroutine(GetSceneStructure());
         }
     }
 
@@ -53,23 +67,34 @@ public class SyncSceneViewManager : MonoBehaviour
             Debug.Log(www.error);
         }
         else
-        { 
+        {
             string responseText = www.downloadHandler.text; // Получение текстового ответа от сервера
             Debug.Log("Server Response: " + responseText);
 
             // Дополнительная обработка ответа, например, десериализация JSON
             _sceneDataFromServer = JsonUtility.FromJson<SceneData>(responseText);
             UpdatePistions(_sceneDataFromServer);
-            // Дальнейшая обработка sceneData...
         }
     }
 
-    private void UpdatePistions(SceneData sceneData)
+
+    private IEnumerator GetSceneStructure()
     {
-        foreach (var gameObject in sceneData.GameObjectsUnity)
+        UnityWebRequest www = new UnityWebRequest(getCurrentStructureURL, "GET");
+        yield return www.SendWebRequest();
+        if (www.result != UnityWebRequest.Result.Success)
         {
-            _currentSceneStructure.GameObjectsUnity.Where(x => x.Name == gameObject.Name).First().Position = gameObject.Position;
-            Debug.Log(gameObject.Name + " position updated");
+            Debug.Log(www.error);
+        }
+        else
+        {
+            string responseText = www?.downloadHandler?.text; // Получение текстового ответа от сервера
+
+
+            // Дополнительная обработка ответа, например, десериализация JSON
+            _sceneDataFromServer = JsonUtility.FromJson<SceneData>(responseText);
+            if (_sceneDataFromServer?.GameObjectsUnity?.Count > 0)
+                UpdatePistions(_sceneDataFromServer);
         }
 
     }
@@ -83,16 +108,46 @@ public class SyncSceneViewManager : MonoBehaviour
 
     private SceneData GetCurrentSceneStructure()
     {
-        var listOfNativeTransforms = GetComponentsInChildren<Transform>();
-        SceneData sceneData = new SceneData(new List<GameObjectUnity>());
+        _listOfNativeTransforms = GetComponentsInChildren<Transform>().ToList();
+        _listOfNativeTransforms.Remove(transform);
 
-        foreach (Transform t in listOfNativeTransforms)
+        SceneData sceneData = new SceneData();
+
+        foreach (Transform t in _listOfNativeTransforms)
         {
+
+            if (!t.gameObject.GetComponent<TransformController>())
+                t.gameObject.AddComponent<TransformController>().Innit(this);
+
             // mapping 
+
+            List<Position> positions = new List<Position>();
+
+            foreach (Vector3 v3 in t.gameObject.GetComponent<TransformController>().LastPositions)
+            {
+                positions.Add(new Position(v3));
+            }
+
+
             Position p = new Position(t.position);
-            sceneData.GameObjectsUnity.Add(new GameObjectUnity(t.gameObject.name, p));
+            sceneData.GameObjectsUnity.Add(new GameObjectUnity(t.gameObject.GetInstanceID(), gameObject.name, positions));
         }
 
         return sceneData;
+    }
+    private void UpdatePistions(SceneData sceneData)
+    {
+
+
+        foreach (var gameObject in sceneData.GameObjectsUnity)
+        {
+
+            var objectToSync = _currentSceneStructure.GameObjectsUnity.Where(x => x.ID == gameObject.ID).First().GetRealSceneGameObject(_listOfNativeTransforms);
+
+            //  print(objectToSync.name + "<color=green> synced </color>");
+
+            objectToSync.transform.localPosition = gameObject.PredictedPosition.UnityVector3;
+        }
+
     }
 }
